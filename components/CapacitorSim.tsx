@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { calculateCapacitance, calculateReactance, calculateImpedance } from './capacitor/CapacitorLogic';
 import { drawEField, drawCharges, drawWire, drawBattery, drawSwitch, drawRealBulb } from './capacitor/CapacitorRenderer';
