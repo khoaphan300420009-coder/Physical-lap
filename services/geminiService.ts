@@ -1,14 +1,16 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.API_KEY || '';
+export const getStoredApiKey = () => localStorage.getItem('GEMINI_API_KEY') || '';
 
 export const generatePhysicsResponse = async (prompt: string, imageBase64?: string): Promise<string> => {
-  if (!API_KEY) {
-    throw new Error("Missing API Key");
+  const apiKey = getStoredApiKey();
+
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING"); // Special error code to trigger modal
   }
 
-  const ai = new GoogleGenAI({ apiKey: API_KEY });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
   try {
     let contents: any = prompt;
@@ -41,8 +43,11 @@ export const generatePhysicsResponse = async (prompt: string, imageBase64?: stri
     });
 
     return response.text || "Xin lỗi, tôi không thể tạo câu trả lời lúc này.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
+    if (error.toString().includes("API_KEY") || error.status === 400 || error.status === 403) {
+        throw new Error("API_KEY_INVALID");
+    }
     throw error;
   }
 };

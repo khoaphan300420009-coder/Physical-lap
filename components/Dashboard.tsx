@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { History, FlaskConical, Book, Sparkles, Atom, ChevronRight, Brain } from 'lucide-react';
+import { History, FlaskConical, Book, Sparkles, Atom, ChevronRight, Brain, Settings } from 'lucide-react';
 import HistoryView from './HistoryView';
 import SimulationsView from './SimulationsView';
 import FormulasView from './FormulasView';
@@ -117,14 +117,21 @@ const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
                     <NavBtn id="brain" icon={Brain} label="Tri Thức Người Học" />
                 </nav>
 
-                {/* Footer User Profile */}
+                {/* Footer User Profile & Settings */}
                 <div className="p-6 mt-auto">
-                    <div className={`flex items-center gap-4 p-3 rounded-3xl bg-white/5 border border-white/5 backdrop-blur-md transition-all duration-500 ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 to-orange-500 border-2 border-white/20 shadow-lg"></div>
-                        <div className="flex flex-col overflow-hidden">
+                    <div className={`flex items-center gap-3 p-3 rounded-3xl bg-white/5 border border-white/5 backdrop-blur-md transition-all duration-500 ${isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 to-orange-500 border-2 border-white/20 shadow-lg shrink-0"></div>
+                        <div className="flex flex-col overflow-hidden flex-1">
                             <span className="text-xs font-bold text-white truncate">Phan Hoang Dang Khoa</span>
-                            <span className="text-sm text-slate-400 truncate">Admin / Developer</span>
+                            <span className="text-[10px] text-slate-400 truncate">Admin / Developer</span>
                         </div>
+                        <button 
+                            onClick={() => window.dispatchEvent(new Event('open-api-key-modal'))}
+                            className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-slate-300 hover:text-cyan-400 transition-colors"
+                            title="Cài đặt API Key"
+                        >
+                            <Settings size={16} />
+                        </button>
                     </div>
                 </div>
             </div>

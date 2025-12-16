@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generatePhysicsResponse } from '../services/geminiService';
 import { ChatMessage } from '../types';
-import { Send, Sparkles, Bot, User, ImagePlus, X, Camera, Zap, BrainCircuit } from 'lucide-react';
+import { Send, Sparkles, Bot, User, ImagePlus, X, Camera, Zap, BrainCircuit, Key } from 'lucide-react';
 import { useToast } from './Toast';
 
 const AIChatView: React.FC = () => {
@@ -33,7 +33,17 @@ const AIChatView: React.FC = () => {
             setMessages(prev => [...prev, { role: 'ai', text: aiText }]);
         } catch (error: any) {
             console.error(error);
-            const errorMsg = error.message || 'Xin lỗi, tôi gặp sự cố khi kết nối tới máy chủ AI.';
+            let errorMsg = 'Xin lỗi, tôi gặp sự cố khi kết nối tới máy chủ AI.';
+            
+            if (error.message === "API_KEY_MISSING") {
+                errorMsg = "Lỗi: Chưa nhập API Key. Vui lòng nhấn vào biểu tượng Chìa khóa (Key) hoặc Cài đặt để nhập key của bạn.";
+                // Trigger modal
+                window.dispatchEvent(new Event('open-api-key-modal'));
+            } else if (error.message === "API_KEY_INVALID") {
+                errorMsg = "Lỗi: API Key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.";
+                window.dispatchEvent(new Event('open-api-key-modal'));
+            }
+
             setMessages(prev => [...prev, { role: 'ai', text: errorMsg, isError: true }]);
             addToast(errorMsg, 'error');
         } finally {
@@ -96,8 +106,17 @@ const AIChatView: React.FC = () => {
                         <span className="text-[10px] uppercase tracking-[0.2em] text-cyan-500/80 font-bold font-sans block">Powered by Gemini 2.5</span>
                     </div>
                 </div>
-                <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-400 backdrop-blur-md">
-                    <Zap size={12} className="text-yellow-400 fill-yellow-400"/> Vision AI Active
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => window.dispatchEvent(new Event('open-api-key-modal'))}
+                        className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-slate-400 hover:text-white hover:border-cyan-500/50 transition-all backdrop-blur-md"
+                        title="Cập nhật API Key"
+                    >
+                        <Key size={12} /> Config Key
+                    </button>
+                    <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-400 backdrop-blur-md">
+                        <Zap size={12} className="text-yellow-400 fill-yellow-400"/> Vision AI Active
+                    </div>
                 </div>
             </div>
 
@@ -138,6 +157,15 @@ const AIChatView: React.FC = () => {
                                     <div className="prose prose-invert max-w-none prose-p:leading-7 prose-headings:text-cyan-300 prose-strong:text-white prose-a:text-cyan-400">
                                         <p className="whitespace-pre-line">{m.text}</p>
                                     </div>
+                                    
+                                    {m.isError && (
+                                        <button 
+                                            onClick={() => window.dispatchEvent(new Event('open-api-key-modal'))}
+                                            className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold transition-colors"
+                                        >
+                                            Nhập API Key ngay
+                                        </button>
+                                    )}
                                 </div>
                                 <span className="text-[10px] text-slate-500 px-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 rounded py-0.5 backdrop-blur-sm self-start">
                                     {m.role === 'ai' ? 'Nova AI' : 'You'} • {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
