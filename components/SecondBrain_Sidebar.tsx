@@ -10,15 +10,56 @@ interface SidebarProps {
 const SecondBrainSidebar: React.FC<SidebarProps> = ({ view, setView }) => {
     const [isHovered, setIsHovered] = useState(false);
 
-    const NavBtn = ({ id, icon: Icon, label, color }: { id: typeof view, icon: any, label: string, color: string }) => {
+    // Map color props to full class names so Tailwind scanner picks them up
+    const colorStyles: Record<string, { bg: string, border: string, text: string, line: string, blur: string }> = {
+        cyan: { 
+            bg: 'bg-gradient-to-r from-cyan-500/20 to-cyan-600/10', 
+            border: 'border-cyan-500/30', 
+            text: 'text-cyan-400',
+            line: 'bg-cyan-500',
+            blur: 'bg-cyan-400/5'
+        },
+        purple: { 
+            bg: 'bg-gradient-to-r from-purple-500/20 to-purple-600/10', 
+            border: 'border-purple-500/30', 
+            text: 'text-purple-400',
+            line: 'bg-purple-500',
+            blur: 'bg-purple-400/5'
+        },
+        emerald: { 
+            bg: 'bg-gradient-to-r from-emerald-500/20 to-emerald-600/10', 
+            border: 'border-emerald-500/30', 
+            text: 'text-emerald-400',
+            line: 'bg-emerald-500',
+            blur: 'bg-emerald-400/5'
+        },
+        pink: { 
+            bg: 'bg-gradient-to-r from-pink-500/20 to-pink-600/10', 
+            border: 'border-pink-500/30', 
+            text: 'text-pink-400',
+            line: 'bg-pink-500',
+            blur: 'bg-pink-400/5'
+        },
+        orange: { 
+            bg: 'bg-gradient-to-r from-orange-500/20 to-orange-600/10', 
+            border: 'border-orange-500/30', 
+            text: 'text-orange-400',
+            line: 'bg-orange-500',
+            blur: 'bg-orange-400/5'
+        }
+    };
+
+    const NavBtn = ({ id, icon: Icon, label, color }: { id: typeof view, icon: any, label: string, color: keyof typeof colorStyles }) => {
         const isActive = view === id;
+        const styles = colorStyles[color];
+
         return (
             <button 
                 onClick={() => setView(id)}
                 className={`
                     relative flex items-center gap-4 p-4 rounded-2xl transition-all duration-500 group overflow-hidden w-full
                     ${isActive 
-                        ? `bg-gradient-to-r from-${color}-500/20 to-${color}-600/10 text-${color}-400 border border-${color}-500/30 shadow-[0_0_20px_rgba(0,0,0,0.4)]` 
+                        ? `${styles.bg} ${styles.text} ${styles.border} border shadow-[0_0_20px_rgba(0,0,0,0.4)]` 
                         : 'text-slate-500 hover:text-slate-200 hover:bg-white/5 border border-transparent'
                     }
                 `}
@@ -35,9 +76,9 @@ const SecondBrainSidebar: React.FC<SidebarProps> = ({ view, setView }) => {
                 </span>
 
                 {isActive && (
-                    <div className={`absolute inset-0 bg-${color}-400/5 blur-md`}></div>
+                    <div className={`absolute inset-0 ${styles.blur} blur-md`}></div>
                 )}
-                <div className={`absolute right-0 top-0 h-full w-1 bg-${color}-500 transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0'}`}></div>
+                <div className={`absolute right-0 top-0 h-full w-1 ${styles.line} transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0'}`}></div>
             </button>
         );
     };
