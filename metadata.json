@@ -1,0 +1,8 @@
+{
+  "name": "Physical Lab",
+  "description": "An immersive, interactive physics simulation hub featuring historical timelines, formula wikis, and AI assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
