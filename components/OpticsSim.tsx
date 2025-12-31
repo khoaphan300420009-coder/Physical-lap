@@ -174,8 +174,11 @@ const OpticsSim: React.FC = () => {
                 // Draw Rays
                 ctx.strokeStyle = 'rgba(255, 255, 0, 0.7)'; ctx.lineWidth = 1/params.zoom;
                 
+                // Ray 1: Top to Lens Center
                 ctx.beginPath(); ctx.moveTo(objX, cy - objH); ctx.lineTo(lensX, cy); ctx.lineTo(imageX, cy + imageH); ctx.stroke();
+                // Ray 2: Parallel
                 ctx.beginPath(); ctx.moveTo(objX, cy - objH); ctx.lineTo(lensX, cy - objH); ctx.lineTo(imageX, cy + imageH); ctx.stroke();
+                // Ray 3: Bottom
                 ctx.beginPath(); ctx.moveTo(objX, cy); ctx.lineTo(lensX, cy); ctx.lineTo(imageX, cy); ctx.stroke();
 
                 // 7. Visualizing Focus on Retina
@@ -186,6 +189,7 @@ const OpticsSim: React.FC = () => {
                 ctx.font = 'bold 12px sans-serif';
                 ctx.fillText(isFocused ? "RÕ NÉT" : "MỜ", retinaX + 10, cy);
                 
+                // Draw circle of confusion on retina if blurred
                 if (!isFocused) {
                     const blurRadius = Math.min(20, focusDiff * 0.2);
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';

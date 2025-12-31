@@ -1,17 +1,14 @@
-
 import { GoogleGenAI } from "@google/genai";
 
-export const getStoredApiKey = () => localStorage.getItem('GEMINI_API_KEY') || '';
+const apiKey = process.env.API_KEY;
+
+if (!apiKey) {
+  throw new Error("CRITICAL: Gemini API Key is not configured in environment variables.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 export const generatePhysicsResponse = async (prompt: string, imageBase64?: string): Promise<string> => {
-  const apiKey = getStoredApiKey();
-
-  if (!apiKey) {
-    throw new Error("API_KEY_MISSING"); // Special error code to trigger modal
-  }
-
-  const ai = new GoogleGenAI({ apiKey: apiKey });
-
   try {
     let contents: any = prompt;
 
@@ -35,7 +32,7 @@ export const generatePhysicsResponse = async (prompt: string, imageBase64?: stri
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: contents,
       config: {
         systemInstruction: "Bạn là một trợ lý ảo chuyên về Vật Lý học (Physical Lab AI) được phát triển bởi Phan Hoàng Đăng Khoa. \n\nNhiệm vụ của bạn bao gồm:\n1. Giải thích các hiện tượng, định luật vật lý.\n2. Giải bài tập vật lý (có thể qua hình ảnh).\n3. Lên kế hoạch học tập chi tiết cho học sinh THPT.\n4. Ra đề bài tập thực hành hoặc trắc nghiệm khi được yêu cầu.\n\nHãy trả lời ngắn gọn, chính xác, khơi gợi trí tò mò. Sử dụng tiếng Việt. Nếu có công thức, hãy dùng định dạng LaTeX đặt trong dấu $.",
@@ -45,9 +42,7 @@ export const generatePhysicsResponse = async (prompt: string, imageBase64?: stri
     return response.text || "Xin lỗi, tôi không thể tạo câu trả lời lúc này.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    if (error.toString().includes("API_KEY") || error.status === 400 || error.status === 403) {
-        throw new Error("API_KEY_INVALID");
-    }
-    throw error;
+    // Throw a generic error for the UI to handle gracefully.
+    throw new Error("An error occurred while communicating with the AI service.");
   }
 };

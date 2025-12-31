@@ -238,16 +238,23 @@ export interface Note {
 export interface Flashcard {
     id: string;
     noteId: string;
-    type: 'Basic' | 'Quiz' | 'TrueFalse'; // NEW: Advanced types
+    type: 'Basic' | 'Quiz' | 'TrueFalse'; 
     question: string;
     answer: string; // Used for Basic/Explanation
     options?: string[]; // For Quiz
     correctIndex?: number; // For Quiz
     correctValue?: boolean; // For TrueFalse
+    
+    // Spaced Repetition Fields
     nextReview: number;
     interval: number; // days
     easeFactor: number;
     streak: number;
+    
+    // Advanced Study Status (New)
+    status?: 'new' | 'learning' | 'reviewing' | 'mastered';
+    successRate?: number;
+    lastReviewed?: number;
 }
 
 export interface Task {

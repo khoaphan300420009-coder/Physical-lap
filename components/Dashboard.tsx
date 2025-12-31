@@ -1,13 +1,25 @@
 
 import React, { useState, useEffect } from 'react';
-import { History, FlaskConical, Book, Sparkles, Atom, ChevronRight, Brain, Settings } from 'lucide-react';
+import { History, FlaskConical, Book, Sparkles, Atom, ChevronRight, Brain } from 'lucide-react';
 import HistoryView from './HistoryView';
 import SimulationsView from './SimulationsView';
 import FormulasView from './FormulasView';
 import AIChatView from './AIChatView';
 import SecondBrainView from './SecondBrainView';
 import { Note, Flashcard } from '../types';
-import { SEED_NOTES, SEED_FLASHCARDS } from './second_brain/initialData';
+import { SEED_NOTES, SEED_FLASHCARDS } from '../lib/core/initialData';
+
+// Helper for debouncing
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+}
 
 interface DashboardProps {
     onBack: () => void;
@@ -20,23 +32,51 @@ const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
     // --- SECOND BRAIN PERSISTENT STATE ---
     // Initialize from localStorage or use Seed Data
     const [notes, setNotes] = useState<Note[]>(() => {
-        const saved = localStorage.getItem('sb_notes');
-        return saved ? JSON.parse(saved) : SEED_NOTES;
+        try {
+            const saved = localStorage.getItem('sb_notes');
+            return saved ? JSON.parse(saved) : SEED_NOTES;
+        } catch (e) {
+            console.error("Failed to load notes", e);
+            return SEED_NOTES;
+        }
     });
 
     const [flashcards, setFlashcards] = useState<Flashcard[]>(() => {
-        const saved = localStorage.getItem('sb_flashcards');
-        return saved ? JSON.parse(saved) : SEED_FLASHCARDS;
+        try {
+            const saved = localStorage.getItem('sb_flashcards');
+            return saved ? JSON.parse(saved) : SEED_FLASHCARDS;
+        } catch (e) {
+            console.error("Failed to load flashcards", e);
+            return SEED_FLASHCARDS;
+        }
     });
 
-    // Save to LocalStorage whenever state changes
+    // Debounce state for persistence
+    const debouncedNotes = useDebounce(notes, 1000);
+    const debouncedFlashcards = useDebounce(flashcards, 1000);
+
+    // Save to LocalStorage
     useEffect(() => {
-        localStorage.setItem('sb_notes', JSON.stringify(notes));
-    }, [notes]);
+        localStorage.setItem('sb_notes', JSON.stringify(debouncedNotes));
+    }, [debouncedNotes]);
 
     useEffect(() => {
-        localStorage.setItem('sb_flashcards', JSON.stringify(flashcards));
-    }, [flashcards]);
+        localStorage.setItem('sb_flashcards', JSON.stringify(debouncedFlashcards));
+    }, [debouncedFlashcards]);
+    
+    // --- CROSS-TAB SYNC ---
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'sb_notes' && e.newValue) {
+                setNotes(JSON.parse(e.newValue));
+            }
+            if (e.key === 'sb_flashcards' && e.newValue) {
+                setFlashcards(JSON.parse(e.newValue));
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
     // -------------------------------------
 
     const NavBtn = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: any, label: string }) => {
@@ -96,7 +136,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
                         <Atom size={32} className="animate-[spin_10s_linear_infinite]"/>
                     </div>
                     
-                    {/* Sliding Text - Positioned to not overlap when expanded */}
+                    {/* Sliding Text */}
                     <div className={`absolute left-28 top-0 h-full flex flex-col justify-center transition-all duration-500 ease-out ${isHovered ? 'opacity-100 translate-x-0 blur-0' : 'opacity-0 translate-x-10 blur-md pointer-events-none'}`}>
                         <h1 className="font-display font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 whitespace-nowrap tracking-tight">Physical Lab</h1>
                         <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-bold whitespace-nowrap leading-tight mt-1">
@@ -125,13 +165,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
                             <span className="text-xs font-bold text-white truncate">Phan Hoang Dang Khoa</span>
                             <span className="text-[10px] text-slate-400 truncate">Admin / Developer</span>
                         </div>
-                        <button 
-                            onClick={() => window.dispatchEvent(new Event('open-api-key-modal'))}
-                            className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-slate-300 hover:text-cyan-400 transition-colors"
-                            title="Cài đặt API Key"
-                        >
-                            <Settings size={16} />
-                        </button>
                     </div>
                 </div>
             </div>

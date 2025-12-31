@@ -5,6 +5,23 @@ import { MousePointer2, MoveHorizontal, RotateCw, Ruler, ArrowRightLeft } from '
 // --- HELPER: Backlash Logic ---
 // Returns the new actual position based on the screw position and backlash
 export const applyBacklash = (currentLoadPos: number, newScrewPos: number, backlashAmount: number) => {
+    // If screw moves right, load gets pushed right (max of load, screw - backlash)
+    // If screw moves left, load gets pulled left (min of load, screw + backlash)
+    // This creates a "dead zone" of width = backlash
+    
+    // However, for simple simulation where we track screw vs load:
+    // Load tracks screw but lags by +/- half backlash or stays put inside deadzone?
+    // Standard model: Load position is constrained to [Screw - Backlash, Screw] (pushing) or similar.
+    
+    // Let's use a simple hysteresis model:
+    // The load can be anywhere between [Screw - Backlash/2] and [Screw + Backlash/2] without moving?
+    // No, usually screw engages one side of the thread.
+    
+    // Model:
+    // If Screw > Load, Load = Screw
+    // If Screw < Load - Backlash, Load = Screw + Backlash
+    // (This implies pulling/pushing model)
+    
     let newLoad = currentLoadPos;
     const upperLimit = newScrewPos;
     const lowerLimit = newScrewPos - backlashAmount;
@@ -107,14 +124,20 @@ export const AnalogMicrometer: React.FC<MicrometerProps> = ({ valueMM }) => {
         const offsetX = (valueMM - startMM) * pxPerMM; // Shift for drawing
         const centerX = w/2;
 
-        // Draw Main Scale
+        // Draw Main Scale (Fixed relative to view window? No, this is vernier.
+        // Let's model a sliding vernier caliper view.)
+        
+        // TOP: Main Scale (Fixed in this view, Vernier moves? Or Main moves?)
+        // Standard view: Main scale stationary, Vernier slides.
+        // To keep specific value centered, we move the Main Scale drawing.
+        
         const mainScaleY = h * 0.4;
         ctx.fillStyle = '#0f172a'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
         ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1;
 
         // Draw Main Scale ticks
         for (let i = startMM - 10; i < startMM + 20; i++) {
-            const x = centerX + (i - valueMM) * pxPerMM; 
+            const x = centerX + (i - valueMM) * pxPerMM; // Position relative to center based on value
             if (x < -20 || x > w+20) continue;
             
             const isCM = i % 10 === 0;
@@ -125,8 +148,14 @@ export const AnalogMicrometer: React.FC<MicrometerProps> = ({ valueMM }) => {
             if (isCM) ctx.fillText((i/10).toString(), x, mainScaleY - 25);
         }
         
-        // Bottom: Vernier Scale
+        // Bottom: Vernier Scale (Fixed in center of view, represents the slider)
+        // Vernier length 9mm divided into 10 parts -> 0.9mm per div.
+        // So 10 vernier div = 9 main div.
         const vernierY = mainScaleY + 1;
+        // The "0" of vernier is at valueMM. Since we shifted main scale so valueMM is at center,
+        // The vernier 0 is exactly at center.
+        
+        // Draw vernier plate
         ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fillRect(centerX - 10, vernierY, pxPerMM * 10 + 20, 30);
         ctx.fillStyle = '#0f172a';
         
