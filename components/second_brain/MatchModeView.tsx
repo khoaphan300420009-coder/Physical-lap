@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { Flashcard } from '../../types';
-import { Gamepad2, Timer, AlertCircle } from 'lucide-react';
-import { shuffleArray } from '../../utils/helpers'; // Assuming helper file created
+import { Gamepad2, Timer, RotateCcw } from 'lucide-react';
+import { shuffleArray } from '../../utils/helpers';
 
 interface MatchModeProps {
     flashcards: Flashcard[];
@@ -17,37 +16,45 @@ interface Tile {
 }
 
 // --- OPTIMIZATION: Memoized Timer Component ---
-// This prevents the entire grid from re-rendering every 100ms
-const GameTimer = memo(({ isPlaying, onTick, penalty }: { isPlaying: boolean, onTick: (t: number) => void, penalty: number }) => {
-    const [time, setTime] = useState(0);
-    const requestRef = useRef<number>();
-    const startTimeRef = useRef<number>(0);
+// Separated to prevent full grid re-renders every frame
+const GameTimer = memo(({ isRunning, onFinish, penalty }: { isRunning: boolean; onFinish: (time: number) => void; penalty: number }) => {
+    const [displayTime, setDisplayTime] = useState(0);
+    const startTimeRef = useRef<number | null>(null);
+    const requestRef = useRef<number>(0);
 
     useEffect(() => {
-        if (isPlaying) {
-            startTimeRef.current = performance.now() - (time * 1000);
-            const animate = (now: number) => {
-                const elapsed = (now - startTimeRef.current) / 1000;
-                setTime(elapsed);
-                onTick(elapsed); // Sync back to parent only for final score
+        if (isRunning) {
+            // If starting/resuming, set start time relative to already elapsed time
+            startTimeRef.current = Date.now() - (displayTime * 1000);
+            
+            const animate = () => {
+                const now = Date.now();
+                if (startTimeRef.current !== null) {
+                    const elapsed = (now - startTimeRef.current) / 1000;
+                    setDisplayTime(elapsed);
+                }
                 requestRef.current = requestAnimationFrame(animate);
             };
             requestRef.current = requestAnimationFrame(animate);
         } else {
-            if(requestRef.current) cancelAnimationFrame(requestRef.current);
+            // Paused or Stopped
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+            // Report final time only when stopping
+            if (startTimeRef.current !== null && displayTime > 0) {
+                onFinish(displayTime);
+            }
         }
         return () => {
-            if(requestRef.current) cancelAnimationFrame(requestRef.current);
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
         };
-    }, [isPlaying]);
+    }, [isRunning]); // Removed displayTime dependency to prevent loop
 
-    // Apply penalty visually
-    const displayTime = time + penalty;
+    const totalTime = displayTime + penalty;
 
     return (
         <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl border font-mono text-2xl font-bold transition-colors ${penalty > 0 ? 'bg-red-900/20 border-red-500/50 text-red-400' : 'bg-blue-900/20 border-blue-500/50 text-blue-400'}`}>
             <Timer size={24}/>
-            {displayTime.toFixed(1)}s
+            {totalTime.toFixed(1)}s
         </div>
     );
 });
@@ -57,26 +64,28 @@ const MatchModeView: React.FC<MatchModeProps> = ({ flashcards }) => {
     const [gameState, setGameState] = useState<'intro' | 'playing' | 'won'>('intro');
     const [penalty, setPenalty] = useState(0);
     
-    // UseRef for final time capture to avoid state re-renders
+    // --- REFS FOR LOGIC STABILITY ---
+    // Using refs allows us to handle rapid clicks without waiting for React render cycles
+    const clickLockRef = useRef(false);
+    const firstSelectionRef = useRef<string | null>(null); // Store ID of first selected tile
+    const timeoutRef = useRef<any>(null); // To clear penalty timeout
     const finalTimeRef = useRef(0);
-    
-    // Logic Refs
-    const selectedRef = useRef<Tile[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
-    const timeoutRefs = useRef<any[]>([]);
 
-    // Cleanup timeouts on unmount
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
-            timeoutRefs.current.forEach(clearTimeout);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
     }, []);
 
-    // MathJax
+    // Trigger MathJax render when tiles change
     useEffect(() => {
         if (containerRef.current && (window as any).MathJax) {
             requestAnimationFrame(() => {
-                (window as any).MathJax.typesetPromise([containerRef.current]).catch(() => {});
+                (window as any).MathJax.typesetPromise([containerRef.current]).catch(() => {
+                    (window as any).MathJax.typesetClear();
+                });
             });
         }
     }, [tiles]);
@@ -87,83 +96,112 @@ const MatchModeView: React.FC<MatchModeProps> = ({ flashcards }) => {
             return;
         }
 
+        // 1. Prepare Data
         const shuffledCards = shuffleArray([...flashcards]).slice(0, 8);
-        
         let newTiles: Tile[] = [];
         shuffledCards.forEach(c => {
-            newTiles.push({ id: c.id + '-q', content: c.question, pairId: c.id, type: 'Q', status: 'hidden' });
-            newTiles.push({ id: c.id + '-a', content: c.type === 'Quiz' && c.options ? c.options[c.correctIndex||0] : c.answer, pairId: c.id, type: 'A', status: 'hidden' });
+            newTiles.push({ 
+                id: c.id + '-q', 
+                content: c.question, 
+                pairId: c.id, 
+                type: 'Q', 
+                status: 'hidden' 
+            });
+            // Handle quiz options vs answer text
+            const answerText = c.type === 'Quiz' && c.options ? c.options[c.correctIndex || 0] : c.answer;
+            newTiles.push({ 
+                id: c.id + '-a', 
+                content: answerText, 
+                pairId: c.id, 
+                type: 'A', 
+                status: 'hidden' 
+            });
         });
 
-        // Robust Shuffle
+        // 2. Shuffle Grid
         newTiles = shuffleArray(newTiles);
         
+        // 3. Reset State
         setTiles(newTiles);
         setGameState('playing');
         setPenalty(0);
-        selectedRef.current = [];
         finalTimeRef.current = 0;
+        
+        // 4. Reset Logic Refs
+        clickLockRef.current = false;
+        firstSelectionRef.current = null;
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
 
-    const handleTileClick = (tile: Tile) => {
-        // Prevent interaction if tile is already acted upon or we have 2 selected (busy state)
-        if (gameState !== 'playing' || tile.status !== 'hidden' || selectedRef.current.length >= 2) return;
+    const handleTileClick = (clickedTile: Tile) => {
+        // Critical: Guard clauses
+        if (
+            gameState !== 'playing' || 
+            clickLockRef.current || 
+            clickedTile.status === 'matched' || 
+            clickedTile.status === 'selected' ||
+            clickedTile.status === 'wrong'
+        ) return;
 
-        // 1. Select First
-        if (selectedRef.current.length === 0) {
-            updateTileStatus(tile.id, 'selected');
-            selectedRef.current = [tile];
-            return;
-        }
-
-        // 2. Select Second
-        if (selectedRef.current.length === 1) {
-            // Check matching ID (prevent clicking same tile twice)
-            if (tile.id === selectedRef.current[0].id) return;
-
-            updateTileStatus(tile.id, 'selected');
-            selectedRef.current.push(tile);
+        // --- Logic Branch ---
+        
+        if (!firstSelectionRef.current) {
+            // --- 1. First Selection ---
+            firstSelectionRef.current = clickedTile.id;
             
-            checkMatch(selectedRef.current[0], tile);
-        }
-    };
-
-    const checkMatch = (t1: Tile, t2: Tile) => {
-        if (t1.pairId === t2.pairId) {
-            // MATCH!
-            const tId = setTimeout(() => {
-                // Batch updates for performance
-                setTiles(prev => {
-                    const next = prev.map(t => (t.id === t1.id || t.id === t2.id) ? { ...t, status: 'matched' as const } : t);
-                    
-                    // Check Win Condition inside the state update to ensure sync
-                    if (next.every(t => t.status === 'matched')) {
-                        setGameState('won');
-                    }
-                    return next;
-                });
-                selectedRef.current = [];
-            }, 200);
-            timeoutRefs.current.push(tId);
+            // UI Update: Select first
+            setTiles(prev => prev.map(t => t.id === clickedTile.id ? { ...t, status: 'selected' } : t));
         } else {
-            // WRONG!
-            const t1Id = setTimeout(() => {
-                updateTileStatus(t1.id, 'wrong');
-                updateTileStatus(t2.id, 'wrong');
-            }, 300);
-            
-            const t2Id = setTimeout(() => {
-                setTiles(prev => prev.map(t => (t.id === t1.id || t.id === t2.id) ? { ...t, status: 'hidden' as const } : t));
-                selectedRef.current = [];
-                setPenalty(p => p + 2); // Add 2s penalty
-            }, 1000);
+            // --- 2. Second Selection ---
+            const firstId = firstSelectionRef.current;
+            const secondId = clickedTile.id;
 
-            timeoutRefs.current.push(t1Id, t2Id);
+            // Lock immediately to prevent 3rd click
+            clickLockRef.current = true;
+
+            // Optimistic UI Update: Select second
+            setTiles(prev => prev.map(t => t.id === secondId ? { ...t, status: 'selected' } : t));
+
+            // Check Match Logic
+            // Note: We need access to pairId. We can find it in current state 'tiles', 
+            // or pass it. Since 'tiles' state is stable in this closure (haven't updated it yet essentially), 
+            // we can search it.
+            const firstTileObj = tiles.find(t => t.id === firstId);
+            const secondTileObj = clickedTile; // Current obj is valid
+
+            if (firstTileObj && firstTileObj.pairId === secondTileObj.pairId) {
+                // --- MATCHED ---
+                // Delay slightly for visual satisfaction, then clear
+                setTimeout(() => {
+                    setTiles(prev => {
+                        const next = prev.map(t => (t.id === firstId || t.id === secondId) ? { ...t, status: 'matched' as const } : t);
+                        // Win Check inside state update
+                        if (next.every(t => t.status === 'matched')) {
+                            setGameState('won');
+                        }
+                        return next;
+                    });
+                    
+                    // Reset Logic
+                    firstSelectionRef.current = null;
+                    clickLockRef.current = false;
+                }, 150);
+            } else {
+                // --- WRONG ---
+                // 1. Show Red (Wrong)
+                setTiles(prev => prev.map(t => (t.id === firstId || t.id === secondId) ? { ...t, status: 'wrong' as const } : t));
+
+                // 2. Penalty & Reset after delay
+                timeoutRef.current = setTimeout(() => {
+                    setTiles(prev => prev.map(t => (t.id === firstId || t.id === secondId) ? { ...t, status: 'hidden' as const } : t));
+                    setPenalty(p => p + 2);
+                    
+                    // Reset Logic
+                    firstSelectionRef.current = null;
+                    clickLockRef.current = false;
+                }, 800);
+            }
         }
-    };
-
-    const updateTileStatus = (id: string, status: Tile['status']) => {
-        setTiles(prev => prev.map(t => t.id === id ? { ...t, status } : t));
     };
 
     // Renders
@@ -198,9 +236,9 @@ const MatchModeView: React.FC<MatchModeProps> = ({ flashcards }) => {
                 {penalty > 0 && <div className="text-red-400 font-mono mb-8">Penalty: +{penalty}s</div>}
                 <button 
                     onClick={startGame}
-                    className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-500"
+                    className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-500 flex items-center gap-2"
                 >
-                    Chơi lại
+                    <RotateCcw size={18}/> Chơi lại
                 </button>
             </div>
         );
@@ -211,11 +249,11 @@ const MatchModeView: React.FC<MatchModeProps> = ({ flashcards }) => {
             {/* HUD */}
             <div className="flex justify-center items-center mb-6 relative z-10">
                 <GameTimer 
-                    isPlaying={gameState === 'playing'} 
-                    onTick={(t) => finalTimeRef.current = t}
+                    isRunning={gameState === 'playing'} 
+                    onFinish={(t) => finalTimeRef.current = t}
                     penalty={penalty}
                 />
-                {penalty > 0 && <div className="absolute top-12 text-red-500 text-xs font-bold animate-bounce">+2s PENALTY</div>}
+                {penalty > 0 && <div className="absolute top-14 text-red-500 text-xs font-bold animate-bounce">+2s PENALTY</div>}
             </div>
 
             {/* Grid */}

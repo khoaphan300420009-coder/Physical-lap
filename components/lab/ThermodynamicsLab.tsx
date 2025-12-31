@@ -16,9 +16,11 @@ const ThermodynamicsLab: React.FC = () => {
     const [scenario, setScenario] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     
-    // Physics State
-    const [particles, setParticles] = useState<Particle[]>([]);
-    const [temperature, setTemperature] = useState(300); // Kelvin (controls speed)
+    // Physics State (Refs for performance)
+    const particlesRef = useRef<Particle[]>([]);
+    
+    // UI State (Trigger re-renders)
+    const [temperature, setTemperature] = useState(300); // Kelvin
     const [volumeX, setVolumeX] = useState(600); // Controls box width
     const [pressure, setPressure] = useState(0);
     const [particleCount, setParticleCount] = useState(0);
@@ -45,37 +47,6 @@ const ThermodynamicsLab: React.FC = () => {
         "Thoát khí (Lỗ thủng)"
     ];
 
-    // Initialize logic
-    useEffect(() => {
-        setParticles([]);
-        setVolumeX(600);
-        setTemperature(300);
-        setPressure(0);
-        setMixingMode(false);
-        setIsPistonActive(false);
-        setHasHole(false);
-
-        if (scenario === 0) {
-            // General lab: start empty
-        } else if (scenario === 4) {
-            // Mixing: Pre-fill left (hot) and right (cold)
-            const p: Particle[] = [];
-            for(let i=0; i<30; i++) p.push(createParticle(100 + Math.random()*200, 200, 300, 'red')); // Hot
-            for(let i=0; i<30; i++) p.push(createParticle(400 + Math.random()*200, 200, 100, 'blue')); // Cold
-            setParticles(p);
-            setMixingMode(true);
-        } else {
-            // Others: Start with some gas
-            const p: Particle[] = [];
-            for(let i=0; i<50; i++) p.push(createParticle(300, 200, 300));
-            setParticles(p);
-        }
-
-        if (scenario === 5) setIsPistonActive(true);
-        if (scenario === 6) setHasHole(true);
-
-    }, [scenario]);
-
     const createParticle = (xCenter: number, yCenter: number, temp: number, color?: string, mass: number = 1): Particle => {
         const speed = Math.sqrt(temp) * 0.2;
         const angle = Math.random() * Math.PI * 2;
@@ -90,15 +61,54 @@ const ThermodynamicsLab: React.FC = () => {
         };
     };
 
+    // Initialize logic
+    useEffect(() => {
+        // Reset state
+        particlesRef.current = [];
+        setVolumeX(600);
+        setTemperature(300);
+        setPressure(0);
+        setMixingMode(false);
+        setIsPistonActive(false);
+        setHasHole(false);
+
+        let initialParticles: Particle[] = [];
+
+        if (scenario === 0) {
+            // General lab: start empty
+        } else if (scenario === 4) {
+            // Mixing: Pre-fill left (hot) and right (cold)
+            for(let i=0; i<30; i++) initialParticles.push(createParticle(100 + Math.random()*200, 200, 300, 'red')); // Hot
+            for(let i=0; i<30; i++) initialParticles.push(createParticle(400 + Math.random()*200, 200, 100, 'blue')); // Cold
+            setMixingMode(true);
+        } else {
+            // Others: Start with some gas
+            for(let i=0; i<50; i++) initialParticles.push(createParticle(300, 200, 300));
+        }
+
+        if (scenario === 5) setIsPistonActive(true);
+        if (scenario === 6) setHasHole(true);
+
+        particlesRef.current = initialParticles;
+        setParticleCount(initialParticles.length);
+
+    }, [scenario]);
+
     const addParticles = (count: number, type: 'Normal' | 'Heavy' | 'Light' = 'Normal') => {
         let mass = 1; let color = '#38bdf8';
         if (type === 'Heavy') { mass = 5; color = '#fbbf24'; }
         
-        setParticles(prev => {
-            const newP = [...prev];
-            for(let i=0; i<count; i++) newP.push(createParticle(volumeX/2, 200, temperature, color, mass));
-            return newP;
-        });
+        const newP: Particle[] = [];
+        for(let i=0; i<count; i++) newP.push(createParticle(volumeX/2, 200, temperature, color, mass));
+        
+        particlesRef.current = [...particlesRef.current, ...newP];
+        setParticleCount(particlesRef.current.length);
+    };
+
+    const clearParticles = () => {
+        particlesRef.current = [];
+        setParticleCount(0);
+        setPressure(0);
     };
 
     // Physics Loop
@@ -116,11 +126,9 @@ const ThermodynamicsLab: React.FC = () => {
             const boxY = (height - boxH)/2;
             const boxW = volumeX; // Dynamic width
             
-            // Piston logic (Isobaric or manual piston scenario)
+            // Piston logic
             if (isPistonActive && isPlaying) {
-                // P_gas * Area = F_piston = m*g
-                // Very simplified: if P_internal > P_external, expand
-                const targetVol = (particles.length * temperature) / (pistonMass * 10); // Ideal gas law approx
+                const targetVol = (particlesRef.current.length * temperature) / (pistonMass * 10); 
                 setVolumeX(v => v + (targetVol - v) * 0.05);
             }
 
@@ -136,32 +144,30 @@ const ThermodynamicsLab: React.FC = () => {
                 ctx.clearRect(boxW + 40, boxY + boxH/2 - 20, 20, 40); // Visual hole
             }
 
-            // Piston Lid (if active, vertical or horizontal? Let's assume horizontal expansion for sidebar slider consistency)
-            // Or Vertical Piston for scenario 5
+            // Piston Lid
             if (scenario === 5) {
-                // Horizontal piston visual
                 ctx.fillStyle = '#94a3b8';
                 ctx.fillRect(50 + boxW, boxY, 20, boxH);
             }
 
             // Mixing wall
             if (mixingMode && boxW > 300) {
-                // Divider removed if volume expanded or manual toggle? 
-                // For now, let's just draw a faint line to show where they started
                 ctx.beginPath(); ctx.moveTo(350, boxY); ctx.lineTo(350, boxY+boxH); 
                 ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.stroke();
             }
 
             if (isPlaying) {
-                // Update Particles
-                particles.forEach(p => {
-                    // Update Speed based on Temp (Scenario 1, 2, 4 don't auto-update speed, allow mixing)
-                    // If Isothermal/Isochoric (Scenario 1,2), we force speed to match temp slider
+                const particles = particlesRef.current;
+                for (let i = 0; i < particles.length; i++) {
+                    const p = particles[i];
+                    
                     if (!mixingMode) {
                         const currentSpeed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
                         const targetSpeed = Math.sqrt(temperature) * 0.2 / Math.sqrt(p.mass);
+                        // Smoothly adjust speed towards target temp
                         const scale = targetSpeed / (currentSpeed || 1);
-                        p.vx *= scale; p.vy *= scale;
+                        p.vx = p.vx * 0.95 + p.vx * scale * 0.05;
+                        p.vy = p.vy * 0.95 + p.vy * scale * 0.05;
                     }
 
                     p.x += p.vx;
@@ -177,7 +183,7 @@ const ThermodynamicsLab: React.FC = () => {
                     if (p.x > 50 + boxW - p.r) {
                         if (hasHole && p.y > boxY + boxH/2 - 20 && p.y < boxY + boxH/2 + 20) {
                             // Escaped!
-                            p.x = 9999; // Move off screen to be filtered later
+                            p.x = 9999; 
                         } else {
                             p.x = 50 + boxW - p.r; p.vx *= -1;
                             pressureAccumulator.current += Math.abs(p.vx * p.mass);
@@ -193,23 +199,19 @@ const ThermodynamicsLab: React.FC = () => {
                         p.y = boxY + boxH - p.r; p.vy *= -1;
                         pressureAccumulator.current += Math.abs(p.vy * p.mass);
                     }
-
-                    // Particle-Particle Collision (Naive O(N^2) for simplicity, limit N < 500)
-                    // Only for Heavy/Light scenario or Mixing to be realistic
-                    // Skipping for performance in "Ideal Gas" usually assumes non-interacting
-                });
+                }
             }
 
-            // Cleanup escaped particles
-            if (hasHole) {
-                const countBefore = particles.length;
-                const newP = particles.filter(p => p.x < 2000); // Basic filter
-                if (newP.length !== countBefore) setParticles(newP);
+            // Cleanup escaped particles periodically
+            if (hasHole && frameCount.current % 60 === 0) {
+                particlesRef.current = particlesRef.current.filter(p => p.x < 2000);
             }
 
             // Draw Particles
-            particles.forEach((p, i) => {
-                if (p.x > 2000) return;
+            const particles = particlesRef.current;
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                if (p.x > 2000) continue;
                 
                 ctx.beginPath(); 
                 ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
@@ -224,21 +226,24 @@ const ThermodynamicsLab: React.FC = () => {
                     ctx.lineTo(p.x + p.vx * 10, p.y + p.vy * 10);
                     ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth=1; ctx.stroke();
                 }
-            });
+            }
 
-            // Calculate Pressure (Impulse per frame)
+            // Calculate Pressure
             frameCount.current++;
-            if (frameCount.current % 10 === 0) { // Update every 10 frames
-                setPressure(Math.round(pressureAccumulator.current / 10)); // Arbitrary unit
+            if (frameCount.current % 10 === 0) { 
+                setPressure(Math.round(pressureAccumulator.current / 10)); 
                 pressureAccumulator.current = 0;
-                setParticleCount(particles.length);
+                // Sync count only occasionally to avoid re-renders
+                if (frameCount.current % 30 === 0 && hasHole) {
+                    setParticleCount(particles.length);
+                }
             }
 
             animationId = requestAnimationFrame(render);
         };
         render();
         return () => cancelAnimationFrame(animationId);
-    }, [particles, volumeX, isPlaying, showVectors, trackParticle, hasHole, isPistonActive, temperature, mixingMode, scenario, pistonMass]);
+    }, [volumeX, isPlaying, showVectors, trackParticle, hasHole, isPistonActive, temperature, mixingMode, scenario, pistonMass]);
 
 
     return (
@@ -267,7 +272,7 @@ const ThermodynamicsLab: React.FC = () => {
                         <button onClick={() => addParticles(10)} className="py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white flex flex-col items-center gap-1 transition-colors">
                             <Wind size={16}/> +10 Hạt
                         </button>
-                        <button onClick={() => setParticles([])} className="py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-colors">
+                        <button onClick={clearParticles} className="py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-xs font-bold flex flex-col items-center gap-1 transition-colors">
                             <RotateCcw size={16}/> Xóa hết
                         </button>
                     </div>
